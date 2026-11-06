@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% macro qs(n) -%}
+/prazos?pagina={{ n }}
+{%- if filtros.advogado %}&advogado={{ filtros.advogado | urlencode }}{% endif %}
+{%- if filtros.tipo %}&tipo={{ filtros.tipo | urlencode }}{% endif %}
+{%- if filtros.status %}&status={{ filtros.status | urlencode }}{% endif %}
+{%- if filtros.inicio %}&inicio={{ filtros.inicio }}{% endif %}
+{%- if filtros.fim %}&fim={{ filtros.fim }}{% endif %}
+{%- if filtros.q %}&q={{ filtros.q | urlencode }}{% endif %}
+{%- endmacro %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Prazos</h1>
+    <p class="subtitulo">{{ pagina_prazos.total }} registro(s) encontrados</p>
+  </div>
+</div>
+
+<form class="filtros" method="get" action="/prazos">
+  <label>
+    <span>Busca livre</span>
+    <input type="search" name="q" value="{{ filtros.q }}" placeholder="processo, advogado, tipo">
+  </label>
+
+  <label>
+    <span>Advogado</span>
+    <select name="advogado">
+      <option value="">Todos</option>
+      {% for nome in advogados %}
+        <option value="{{ nome }}" {% if nome == filtros.advogado %}selected{% endif %}>{{ nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <span>Tipo de prazo</span>
+    <select name="tipo">
+      <option value="">Todos</option>
+      {% for nome in tipos %}
+        <option value="{{ nome }}" {% if nome == filtros.tipo %}selected{% endif %}>{{ nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <span>Status</span>
+    <select name="status">
+      <option value="">Todos</option>
+      {% for valor in ["OK", "REVISAR", "SEM_PRAZO", "PENDENTE_IA", "ERRO_IA", "ERRO_JSON"] %}
+        <option value="{{ valor }}" {% if valor == filtros.status %}selected{% endif %}>{{ valor }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <span>De</span>
+    <input type="date" name="inicio" value="{{ filtros.inicio }}">
+  </label>
+
+  <label>
+    <span>Até</span>
+    <input type="date" name="fim" value="{{ filtros.fim }}">
+  </label>
+
+  <div class="filtros__acoes">
+    <button type="submit">Aplicar</button>
+    <a class="link-limpar" href="/prazos">limpar</a>
+  </div>
+</form>
+
+<div class="painel painel--sem-padding">
+  <div class="tabela-scroll">
+    <table class="tabela tabela--lista">
+      <thead>
+        <tr>
+          <th scope="col">Data do prazo</th>
+          <th scope="col">Advogado</th>
+          <th scope="col">Tipo</th>
+          <th scope="col">Processo</th>
+          <th scope="col">Status</th>
+          <th scope="col">Origem (e-mail)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for prazo in pagina_prazos.itens %}
+          <tr>
+            <td class="agora">{{ prazo.data_prazo | data }}</td>
+            <td>{{ prazo.advogado or "—" }}</td>
+            <td>{{ prazo.tipo_prazo or "—" }}</td>
+            <td class="mono">{{ prazo.numero_processo or "—" }}</td>
+            <td><span class="tag tag--{{ prazo.status | lower }}">{{ prazo.status }}</span></td>
+            <td class="celula-origem">
+              {% if prazo.email %}
+                <span class="origem__assunto" title="{{ prazo.email.assunto }}">{{ prazo.email.assunto or "(sem assunto)" }}</span>
+                <span class="origem__meta">
+                  {{ prazo.email.remetente_nome or prazo.email.remetente_email }}
+                  · recebido em {{ prazo.email.data_recebimento | datahora }}
+                </span>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="6" class="vazio-simples">Nenhum prazo encontrado com esses filtros.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if pagina_prazos.total_paginas > 1 %}
+<nav class="paginacao" aria-label="Paginação">
+  {% if pagina_prazos.tem_anterior %}
+    <a href="{{ qs(pagina_prazos.pagina - 1) }}">← anterior</a>
+  {% else %}
+    <span class="desabilitado">← anterior</span>
+  {% endif %}
+
+  <span class="paginacao__info">
+    página {{ pagina_prazos.pagina }} de {{ pagina_prazos.total_paginas }}
+  </span>
+
+  {% if pagina_prazos.tem_proxima %}
+    <a href="{{ qs(pagina_prazos.pagina + 1) }}">próxima →</a>
+  {% else %}
+    <span class="desabilitado">próxima →</span>
+  {% endif %}
+</nav>
+{% endif %}
+{% endblock %}

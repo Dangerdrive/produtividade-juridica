@@ -1,0 +1,11 @@
+# Dependências de produção (usadas pela Vercel — Python 3.12)
+# Faixas compatíveis: funcionam em 3.12 (runtime da Vercel) e 3.13/3.14 (dev).
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+jinja2>=3.1,<4.0
+sqlalchemy>=2.0,<3.0
+psycopg[binary]>=3.2,<4.0
+httpx>=0.28,<1.0
+pydantic-settings>=2.7,<3.0
+pyjwt[crypto]>=2.9,<3.0
+tzdata>=2024.1

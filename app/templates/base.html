@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>{% block titulo %}{{ titulo }}{% endblock %} · {{ app_name }}</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+  <header class="topo">
+    <a class="topo__marca" href="/">
+      <span class="topo__icone" aria-hidden="true">⚖️</span>
+      <span>{{ app_name }}</span>
+    </a>
+    <nav class="topo__nav" aria-label="Navegação principal">
+      <a href="/" class="{% if titulo == 'Dashboard' %}ativo{% endif %}">Dashboard</a>
+      <a href="/prazos" class="{% if titulo == 'Prazos' %}ativo{% endif %}">Prazos</a>
+      <a href="/docs" target="_blank" rel="noopener">API</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <footer class="rodape">
+    <span>{{ app_name }} · dados extraídos de e-mails de protocolo com apoio de IA</span>
+    <span class="rodape__fuso">Fuso: {{ timezone }}</span>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

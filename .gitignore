@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Ambiente
+.env
+.env.local
+
+# Dados locais
+data/
+*.db
+*.sqlite3
+
+# Ferramentas
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Vercel
+.vercel/
+
+# Sistema
+.DS_Store
+*.log

@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# B008: Depends()/Query() em defaults é o padrão do FastAPI.
+# UP042: mantemos (str, Enum) para compatibilidade com SQLAlchemy/3.12.
+# SIM108: preferimos if/else explícito quando há lógica de data.
+ignore = ["E501", "B008", "UP042", "SIM108"]
+
+[lint.per-file-ignores]
+"legacy/**" = ["ALL"]
