@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  qualidade:
+    name: Lint e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff (lint)
+        run: ruff check --output-format=github app tests scripts api
+
+      - name: Pytest
+        run: pytest
+
+  seguranca:
+    name: Varredura de segredos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Procurar credenciais versionadas
+        run: |
+          set -e
+          padrao='sk-[A-Za-z0-9]{16,}|GOCSPX-|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}'
+          if git grep -nIE "$padrao" -- . ; then
+            echo "::error::Possível credencial encontrada em arquivo versionado."
+            exit 1
+          fi
+          echo "Nenhuma credencial encontrada."
+
+      - name: Garantir que .env não foi commitado
+        run: |
+          set -e
+          if git log --all --name-only --pretty=format: | grep -qx "\.env"; then
+            echo "::error::O arquivo .env aparece no histórico do repositório."
+            exit 1
+          fi
+          echo "Nenhum .env no histórico."

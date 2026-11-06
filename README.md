@@ -1,5 +1,8 @@
 # ⚖️ Produtividade Jurídica — Automação de Prazos
 
+[![CI](https://github.com/Dangerdrive/produtividade-juridica/actions/workflows/ci.yml/badge.svg)](https://github.com/Dangerdrive/produtividade-juridica/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Lê e-mails de protocolo no Gmail, extrai prazos processuais com **LLM (DeepSeek)** e
 apresenta tudo num dashboard web — **Python + FastAPI, pronto para deploy na Vercel**.
 
