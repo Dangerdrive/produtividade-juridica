@@ -58,7 +58,8 @@ jobs:
         run: |
           set -e
           padrao='sk-[A-Za-z0-9]{16,}|GOCSPX-|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}'
-          if git grep -nIE "$padrao" -- . ; then
+          # Exclui este próprio arquivo, que contém o padrão por definição.
+          if git grep -nIE "$padrao" -- . ':(exclude).github/workflows/ci.yml' ; then
             echo "::error::Possível credencial encontrada em arquivo versionado."
             exit 1
           fi
