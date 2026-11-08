@@ -16,8 +16,12 @@
       <span>{{ app_name }}</span>
     </a>
     <nav class="topo__nav" aria-label="Navegação principal">
-      <a href="/" class="{% if titulo == 'Dashboard' %}ativo{% endif %}">Dashboard</a>
-      <a href="/prazos" class="{% if titulo == 'Prazos' %}ativo{% endif %}">Prazos</a>
+      <a href="/" class="{% if rota_ativa == 'home' %}ativo{% endif %}">Início</a>
+      {% for modulo in modulos %}
+        <a href="{{ modulo.rota }}" class="{% if rota_ativa == modulo.chave %}ativo{% endif %}">
+          {{ modulo.nome }}
+        </a>
+      {% endfor %}
       <a href="/docs" target="_blank" rel="noopener">API</a>
     </nav>
   </header>
@@ -27,7 +31,7 @@
   </main>
 
   <footer class="rodape">
-    <span>{{ app_name }} · dados extraídos de e-mails de protocolo com apoio de IA</span>
+    <span>{{ app_name }} · plataforma modular de automação jurídica</span>
     <span class="rodape__fuso">Fuso: {{ timezone }}</span>
   </footer>
 

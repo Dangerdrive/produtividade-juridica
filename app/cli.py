@@ -20,8 +20,8 @@ import json
 import sys
 from pathlib import Path
 
-from app.config import get_settings
-from app.services.extracao import analisar_email, extrair_numeros_processo
+from app.core.config import get_settings
+from app.modules.prazos.services.extracao import analisar_email, extrair_numeros_processo
 
 SEPARADOR = "─" * 78
 
@@ -53,14 +53,14 @@ def _mostrar_analise(assunto: str, corpo: str, *, como_json: bool = False) -> No
 # Comandos
 # ---------------------------------------------------------------------------
 def cmd_emails(args) -> int:
-    from app.services.gmail import GmailClient, GmailError
+    from app.modules.google.gmail import GmailClient, GmailError
 
     settings = get_settings()
     if not settings.gmail_configurado:
         print("Credenciais do Gmail ausentes. Rode: python scripts/authorize_gmail.py")
         return 1
 
-    cliente = GmailClient(settings)
+    cliente = GmailClient(settings, conta=args.conta)
 
     try:
         pagina = cliente.listar_mensagens(args.query, max_results=args.limite)
@@ -94,14 +94,14 @@ def cmd_emails(args) -> int:
 
 
 def cmd_abrir(args) -> int:
-    from app.services.gmail import GmailClient, GmailError
+    from app.modules.google.gmail import GmailClient, GmailError
 
     settings = get_settings()
     if not settings.gmail_configurado:
         print("Credenciais do Gmail ausentes. Rode: python scripts/authorize_gmail.py")
         return 1
 
-    cliente = GmailClient(settings)
+    cliente = GmailClient(settings, conta=args.conta)
 
     try:
         mensagem = cliente.obter_mensagem(args.message_id)
@@ -162,7 +162,7 @@ def cmd_testar(args) -> int:
     _mostrar_analise(assunto, corpo, como_json=args.json)
 
     if args.ia:
-        from app.services.gmail import MensagemEmail
+        from app.modules.google.gmail import MensagemEmail
 
         momento = __import__("datetime").datetime.now()
         _executar_ia(
@@ -183,8 +183,8 @@ def cmd_testar(args) -> int:
 def cmd_banco(args) -> int:
     from sqlalchemy import select
 
-    from app.db import SessionLocal, init_db
-    from app.models import Email, Prazo
+    from app.core.db import SessionLocal, init_db
+    from app.modules.prazos.models import Email, Prazo
 
     init_db()
     db = SessionLocal()
@@ -221,8 +221,8 @@ def cmd_banco(args) -> int:
 
 
 def cmd_planilha(args) -> int:
-    from app.db import SessionLocal, init_db
-    from app.services.sheets import sincronizar_planilha
+    from app.core.db import SessionLocal, init_db
+    from app.modules.prazos.services.espelho_sheets import sincronizar_planilha
 
     settings = get_settings()
     if not settings.sheets_configurado:
@@ -246,10 +246,14 @@ def cmd_planilha(args) -> int:
 
 
 def cmd_sincronizar(args) -> int:
-    from app.db import SessionLocal, init_db
-    from app.services.deepseek import DeepSeekClient
-    from app.services.gmail import GmailClient
-    from app.services.ingest import query_continuo, query_historico, sincronizar
+    from app.core.db import SessionLocal, init_db
+    from app.modules.google.gmail import GmailClient
+    from app.modules.prazos.services.deepseek import DeepSeekClient
+    from app.modules.prazos.services.ingest import (
+        query_continuo,
+        query_historico,
+        sincronizar,
+    )
 
     settings = get_settings()
 
@@ -274,7 +278,7 @@ def cmd_sincronizar(args) -> int:
         resultado = sincronizar(
             db,
             settings=settings,
-            gmail=GmailClient(settings),
+            gmail=GmailClient(settings, conta=args.conta),
             deepseek=DeepSeekClient(settings),
             query=consulta,
             limite=args.limite,
@@ -290,10 +294,12 @@ def cmd_sincronizar(args) -> int:
 
 def cmd_explorar(args) -> int:
     """Modo interativo para investigar e-mails e testar regras."""
-    from app.services.gmail import GmailClient, GmailError
+    from app.modules.google.gmail import GmailClient, GmailError
 
     settings = get_settings()
-    cliente = GmailClient(settings) if settings.gmail_configurado else None
+    cliente = (
+        GmailClient(settings, conta=args.conta) if settings.gmail_configurado else None
+    )
 
     if cliente is None:
         print("⚠️  Sem credenciais do Gmail: apenas o modo 'testar' funcionará.")
@@ -379,8 +385,8 @@ def cmd_explorar(args) -> int:
 
 # ---------------------------------------------------------------------------
 def _executar_ia(mensagem) -> None:
-    from app.services.deepseek import DeepSeekClient, DeepSeekError
-    from app.services.extracao import extrair_numeros_processo
+    from app.modules.prazos.services.deepseek import DeepSeekClient, DeepSeekError
+    from app.modules.prazos.services.extracao import extrair_numeros_processo
 
     settings = get_settings()
     if not settings.deepseek_configurado:
@@ -413,6 +419,68 @@ def _executar_ia(mensagem) -> None:
 
 
 # ---------------------------------------------------------------------------
+def cmd_repasses(args) -> int:
+    """Lista as tarefas pendentes da planilha de repasses."""
+    from app.modules.repasses.services import dominio
+    from app.modules.repasses.services.planilha import (
+        RepassesError,
+        RepassesPlanilha,
+    )
+
+    settings = get_settings()
+    if not settings.repasses_configurado:
+        print(
+            "Planilha de repasses não configurada.\n"
+            "Defina GOOGLE_SERVICE_ACCOUNT_JSON e REPASSES_SHEET_ID no .env."
+        )
+        return 1
+
+    try:
+        repasses = RepassesPlanilha(settings).listar()
+    except RepassesError as exc:
+        print(f"Erro ao ler a planilha: {exc}")
+        return 1
+
+    if args.json:
+        print(json.dumps([r.as_dict() for r in dominio.pendentes(repasses)], ensure_ascii=False, indent=2))
+        return 0
+
+    resumo = dominio.resumir(repasses)
+    _titulo(
+        f"{resumo.total} repasse(s) · "
+        f"{resumo.pendentes + resumo.em_andamento} em aberto · "
+        f"{resumo.atrasados} atrasado(s)"
+    )
+
+    for repasse in dominio.pendentes(repasses):
+        atraso = " ⚠️" if repasse.atrasado() else ""
+        print(
+            f"{repasse.id:12s} | {repasse.cliente[:28]:28s} | "
+            f"{repasse.valor_formatado:>12s} | "
+            f"{repasse.data_prevista or '—'} | "
+            f"{repasse.status.rotulo}{atraso}"
+        )
+
+    print(f"\nValor em aberto: {resumo.valor_aberto_formatado}")
+    return 0
+
+
+def cmd_repasse_token(args) -> int:
+    """Gera o link individual de acompanhamento de um cliente."""
+    from app.modules.repasses.tokens import TokenClienteError, link_cliente
+
+    settings = get_settings()
+    try:
+        link = link_cliente(args.cliente, settings.repasses_cliente_token_secret)
+    except TokenClienteError as exc:
+        print(f"Erro: {exc}")
+        return 1
+
+    print(f"{args.base.rstrip('/')}{link}" if args.base else link)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 def montar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="prazos",
@@ -425,12 +493,14 @@ def montar_parser() -> argparse.ArgumentParser:
     p_emails = sub.add_parser("emails", help="lista mensagens do Gmail")
     p_emails.add_argument("--query", default=None)
     p_emails.add_argument("--limite", type=int, default=10)
+    p_emails.add_argument("--conta", default=None, help="nome da conta Gmail")
     p_emails.set_defaults(func=cmd_emails)
 
     p_abrir = sub.add_parser("abrir", help="mostra uma mensagem e a extração")
     p_abrir.add_argument("message_id")
     p_abrir.add_argument("--corpo", type=int, default=0, help="limite de caracteres do corpo")
     p_abrir.add_argument("--ia", action="store_true", help="também chama a DeepSeek")
+    p_abrir.add_argument("--conta", default=None, help="nome da conta Gmail")
     p_abrir.set_defaults(func=cmd_abrir)
 
     p_testar = sub.add_parser("testar", help="testa as regras num texto")
@@ -454,19 +524,29 @@ def montar_parser() -> argparse.ArgumentParser:
     p_sync.add_argument("--modo", choices=["continuo", "historico"], default="continuo")
     p_sync.add_argument("--limite", type=int, default=None)
     p_sync.add_argument("--segundos", type=float, default=None)
+    p_sync.add_argument("--conta", default=None, help="nome da conta Gmail")
     p_sync.set_defaults(func=cmd_sincronizar)
+
+    p_repasses = sub.add_parser("repasses", help="lista as tarefas pendentes de repasses")
+    p_repasses.set_defaults(func=cmd_repasses)
+
+    p_token = sub.add_parser(
+        "repasse-token", help="gera o link de acompanhamento de um cliente"
+    )
+    p_token.add_argument("cliente")
+    p_token.add_argument("--base", default="", help="URL base (ex.: https://app.vercel.app)")
+    p_token.set_defaults(func=cmd_repasse_token)
 
     p_exp = sub.add_parser("explorar", help="modo interativo")
     p_exp.add_argument("--limite", type=int, default=10)
     p_exp.add_argument("--corpo", type=int, default=2500)
+    p_exp.add_argument("--conta", default=None, help="nome da conta Gmail")
     p_exp.set_defaults(func=cmd_explorar)
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    from app.services.gmail import MensagemEmail  # noqa: F401  (import tardio)
-
     parser = montar_parser()
     args = parser.parse_args(argv)
     args.json = getattr(args, "json", False)

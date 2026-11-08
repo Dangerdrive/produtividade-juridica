@@ -4,8 +4,14 @@
 > LLM (DeepSeek) → persistência relacional → dashboard de produtividade por advogado.
 >
 > **Stack:** Python 3.12 · FastAPI · SQLAlchemy 2 · Jinja2 + Chart.js · deploy serverless na Vercel.
-> **Versão do documento:** 2.0 (substitui o plano original em Google Apps Script).
-> **Última atualização:** 06/11/2026
+> **Versão do documento:** 2.1 (substitui o plano original em Google Apps Script).
+> **Última atualização:** 08/11/2026
+
+> 🧩 **Arquitetura modular (2.0):** o app de prazos virou o módulo
+> `app/modules/prazos`. A integração com Google (Gmail, Sheets e Docs) vive em
+> `app/modules/google` e é compartilhada. O módulo `app/modules/repasses` usa a
+> mesma camada Google para operar uma planilha própria, listar pendências e
+> publicar o status por cliente.
 
 ---
 
@@ -37,7 +43,7 @@ marcada para reprocessamento.
 | Requisito | Apps Script | Python na Vercel |
 |---|---|---|
 | Versionamento / CI | Limitado (clasp) | Git + pipeline padrão |
-| Testes automatizados | Praticamente inviável | `pytest` (84 testes) |
+| Testes automatizados | Praticamente inviável | `pytest` (173 testes) |
 | Dashboard | Tabela dinâmica na planilha | HTML/Chart.js + API JSON |
 | Consultas | Percorrer planilha inteira | SQL com índices |
 | Integrações futuras | Difícil | Qualquer biblioteca Python |
@@ -83,14 +89,18 @@ flowchart TB
 
 | Módulo | Responsabilidade |
 |---|---|
-| `services/gmail.py` | OAuth2 (refresh token), listagem paginada, `messages.get`, `messages.modify`, decoding MIME |
-| `services/deepseek.py` | Prompt, chamada HTTP com retry/backoff, parse tolerante |
-| `services/extracao.py` | Regex determinística: nº do processo (assunto), datas, tipos de prazo |
-| `services/normalizacao.py` | Datas, número CNJ, deduplicação, status por prazo |
-| `services/ingest.py` | Orquestração, idempotência, checkpoint, orçamento de tempo |
-| `services/sheets.py` | Projeção dos prazos na planilha (conta de serviço + Sheets API) |
-| `services/reports.py` | Agregações do dashboard e consultas paginadas |
-| `routers/*` | Páginas HTML, API JSON, cron/manual/planilha |
+| `app/core/*` | Configuração, banco, dependências, templates e registro de módulos |
+| `app/modules/google/gmail.py` | OAuth2 (refresh token), listagem paginada, `messages.get`, `messages.modify`, decoding MIME |
+| `app/modules/google/sheets.py` | Cliente genérico da Sheets API (CRUD de valores, cabeçalho, metadados) |
+| `app/modules/google/docs.py` | Cliente da Docs API (ler, criar, anexar, substituir) |
+| `app/modules/google/auth.py` | Conta de serviço: JWT RS256 e cache de access token por escopo |
+| `app/modules/prazos/services/deepseek.py` | Prompt, chamada HTTP com retry/backoff, parse tolerante |
+| `app/modules/prazos/services/extracao.py` | Regex determinística: nº do processo (assunto), datas, tipos de prazo |
+| `app/modules/prazos/services/normalizacao.py` | Datas, número CNJ, deduplicação, status por prazo |
+| `app/modules/prazos/services/ingest.py` | Orquestração, idempotência, checkpoint, orçamento de tempo |
+| `app/modules/prazos/services/espelho_sheets.py` | Projeção dos prazos na planilha do módulo de prazos |
+| `app/modules/prazos/services/reports.py` | Agregações do dashboard e consultas paginadas |
+| `app/modules/repasses/*` | Planilha própria, pendências, status por cliente e links individuais |
 | `apps_script/` | Dashboard (tabela dinâmica) que lê a aba `DB_Prazos` |
 
 ### 3.2 Fluxo de uma mensagem
@@ -189,7 +199,7 @@ Consequências na ingestão:
    processo não desapareça do controle.
 
 As demais regras (datas, palavras-chave de tipo, "prazo de N dias") existem em
-`services/extracao.py` e são expostas no **CLI** para calibrar heurísticas:
+`app/modules/prazos/services/extracao.py` e são expostas no **CLI** para calibrar heurísticas:
 
 ```bash
 python -m app.cli testar --assunto "..." --corpo "..."
@@ -366,7 +376,7 @@ checkpoint é apagado.
 - **Nenhum segredo no código**: `DEEPSEEK_API_KEY`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`,
   `SYNC_TOKEN` e `APP_PASSWORD` vêm de variáveis de ambiente.
 - `APP_PASSWORD` → HTTP Basic em todas as rotas exceto `/health`.
-- `SYNC_TOKEN` → obrigatório em `POST /api/sync` e `GET /api/cron/sync`; também aceita o
+- `SYNC_TOKEN` → obrigatório em `POST /api/prazos/sync` e `GET /api/prazos/cron/sync`; também aceita o
   cabeçalho `x-vercel-cron` e o `Authorization: Bearer` enviado nativamente pela Vercel.
 - Escopo mínimo do Gmail: `gmail.modify` (necessário para remover `UNREAD`). Para uso
   somente-leitura, troque por `gmail.readonly` e desligue `GMAIL_MARCAR_COMO_LIDA`.
@@ -380,7 +390,7 @@ checkpoint é apagado.
 
 | Ação | Como |
 |---|---|
-| Sincronização contínua | `POST /api/sync` ou `GET /api/cron/sync` |
+| Sincronização contínua | `POST /api/prazos/sync` ou `GET /api/prazos/cron/sync` |
 | Carga histórica | `?modo=historico` (retomável) |
 | Terminal | `python scripts/sync_cli.py --modo historico` |
 | Criar schema | automático no boot · `python scripts/init_db.py` |
@@ -417,13 +427,13 @@ Ajustes por variável de ambiente: `GMAIL_QUERY`, `GMAIL_LOOKBACK_DAYS`,
 |---|---|
 | `DB_Prazos` (planilha, 12 colunas) | tabelas `emails` + `prazos` + projeção na planilha |
 | `Dashboard` (tabela dinâmica) | página `/` (SQL) + aba `Dashboard` recriada pelo Apps Script |
-| `processarEmailsProtocolo()` | `POST /api/sync?modo=continuo` |
-| `processarHistorico2Meses()` | `POST /api/sync?modo=historico` |
+| `processarEmailsProtocolo()` | `POST /api/prazos/sync?modo=continuo` |
+| `processarHistorico2Meses()` | `POST /api/prazos/sync?modo=historico` |
 | Gatilho de 15 min | Vercel Cron / agendador externo |
 | `PropertiesService` | variáveis de ambiente |
 | `UrlFetchApp` | `httpx` |
 | `Logger`/`console` | logging da plataforma |
-| Sem testes | 84 testes `pytest` |
+| Sem testes | 173 testes `pytest` |
 
 O código antigo permanece em `legacy/apps_script/` apenas como referência histórica.
 

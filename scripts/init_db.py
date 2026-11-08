@@ -17,9 +17,9 @@ RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from app.config import get_settings  # noqa: E402
-from app.db import SessionLocal, init_db  # noqa: E402
-from app.models import Email, Prazo, StatusExtracao  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
+from app.core.db import SessionLocal, init_db  # noqa: E402
+from app.modules.prazos.models import Email, Prazo, StatusExtracao  # noqa: E402
 
 DEMO = [
     {

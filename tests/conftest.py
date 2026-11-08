@@ -18,16 +18,22 @@ os.environ["GMAIL_CLIENT_ID"] = ""
 os.environ["GMAIL_CLIENT_SECRET"] = ""
 os.environ["GMAIL_REFRESH_TOKEN"] = ""
 os.environ["DEEPSEEK_API_KEY"] = ""
+os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"] = ""
+os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = ""
+os.environ["GOOGLE_SHEET_ID"] = ""
+os.environ["REPASSES_SHEET_ID"] = ""
+os.environ["REPASSES_CLIENTE_TOKEN_SECRET"] = ""
+os.environ["REPASSES_API_TOKEN"] = ""
 
 from datetime import datetime  # noqa: E402
 
 import pytest  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
-from app.config import Settings  # noqa: E402
-from app.db import Base, build_engine  # noqa: E402
-from app.services.gmail import MensagemEmail, PaginaMensagens  # noqa: E402
-from app.services.normalizacao import PrazoExtraido  # noqa: E402
+from app.core.config import Settings  # noqa: E402
+from app.core.db import Base, build_engine  # noqa: E402
+from app.modules.google.gmail import MensagemEmail, PaginaMensagens  # noqa: E402
+from app.modules.prazos.services.normalizacao import PrazoExtraido  # noqa: E402
 
 
 @pytest.fixture()
@@ -48,7 +54,7 @@ def client(db):
     """TestClient com o banco de teste injetado."""
     from fastapi.testclient import TestClient
 
-    from app.db import get_db
+    from app.core.db import get_db
     from app.main import app
 
     app.dependency_overrides[get_db] = lambda: db
@@ -85,7 +91,7 @@ class FakeGmail:
 
     def obter_mensagem(self, message_id: str) -> MensagemEmail:
         if message_id in self.falhar_em:
-            from app.services.gmail import GmailError
+            from app.modules.google.gmail import GmailError
 
             raise GmailError("falha simulada")
         return self.mensagens[message_id]

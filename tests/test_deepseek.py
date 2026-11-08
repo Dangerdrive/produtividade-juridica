@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 
-from app.services.deepseek import (
+from app.modules.prazos.services.deepseek import (
     DeepSeekClient,
     DeepSeekError,
     RespostaInvalida,

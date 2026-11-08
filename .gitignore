@@ -9,6 +9,15 @@ env/
 .env
 .env.local
 
+# Credenciais locais
+gmail_contas.json
+*service-account*.json
+*service_account*.json
+garcez-admin-12b12c62486f.json
+
+# Backups locais (podem conter .env/credenciais)
+*.zip
+
 # Dados locais
 data/
 *.db

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import os
 import secrets
 import sys
@@ -115,6 +116,24 @@ def escrever_env(caminho: Path, chave: str, valor: str) -> None:
     caminho.write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
 
+def escrever_conta_json(caminho: Path, nome: str, dados: dict) -> None:
+    """Adiciona/atualiza uma conta no arquivo JSON de contas."""
+    existente: dict = {}
+    if caminho.exists():
+        try:
+            conteudo = json.loads(caminho.read_text(encoding="utf-8"))
+            if isinstance(conteudo, dict):
+                existente = conteudo
+        except json.JSONDecodeError:
+            existente = {}
+
+    existente[nome] = dados
+    caminho.write_text(
+        json.dumps(existente, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Autoriza o acesso ao Gmail (OAuth2)")
     parser.add_argument("--client-id", default=os.getenv("GMAIL_CLIENT_ID", ""))
@@ -122,9 +141,27 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--escopo", default=ESCOPO_PADRAO)
     parser.add_argument(
+        "--manual",
+        action="store_true",
+        help="Não sobe servidor local; peça para colar a URL/código de retorno",
+    )
+    parser.add_argument(
         "--write-env",
         action="store_true",
-        help="Grava o refresh token no .env depois de gerado",
+        help="Grava o refresh token (ou o caminho do arquivo de contas) no .env",
+    )
+    parser.add_argument(
+        "--conta",
+        default="padrao",
+        help="Nome da conta ao gravar em --contas-file (padrão: padrao)",
+    )
+    parser.add_argument(
+        "--contas-file",
+        default="",
+        help="Arquivo JSON de contas a criar/atualizar (ex.: gmail_contas.json)",
+    )
+    parser.add_argument(
+        "--rotulo", default="", help="Rótulo legível da conta (ex.: Conta do escritório)"
     )
     args = parser.parse_args()
 
@@ -143,24 +180,48 @@ def main() -> int:
     redirect_uri = f"http://localhost:{args.port}/"
     url = gerar_url(client_id, redirect_uri, args.escopo)
 
-    servidor = HTTPServer(("localhost", args.port), _CapturaCallback)
-    thread = threading.Thread(target=servidor.serve_forever, daemon=True)
-    thread.start()
-
     print("\n1) Abra a URL abaixo, escolha a conta do Gmail e autorize:\n")
     print(f"   {url}\n")
-    with contextlib.suppress(Exception):
-        webbrowser.open(url)
 
-    print("2) Aguardando o retorno do Google no navegador...")
-    _evento.wait(timeout=300)
-    servidor.shutdown()
+    if args.manual:
+        print(
+            "2) Depois de autorizar, copie a URL completa para onde o navegador foi "
+            "redirecionado\n   (ou apenas o valor de 'code') e cole abaixo."
+        )
+        entrada = input("\nURL/código: ").strip()
+        if not entrada:
+            print("Nada informado.", file=sys.stderr)
+            return 1
 
-    if "erro" in _codigo_recebido:
-        print(f"\nAutorização recusada: {_codigo_recebido['erro']}", file=sys.stderr)
-        return 1
+        parametros = urllib.parse.parse_qs(urllib.parse.urlparse(entrada).query)
+        if "error" in parametros:
+            print(
+                f"Autorização recusada: {parametros['error'][0]}", file=sys.stderr
+            )
+            return 1
 
-    codigo = _codigo_recebido.get("code")
+        codigo = parametros.get("code", [entrada])[0]
+    else:
+        with contextlib.suppress(Exception):
+            webbrowser.open(url)
+
+        servidor = HTTPServer(("localhost", args.port), _CapturaCallback)
+        thread = threading.Thread(target=servidor.serve_forever, daemon=True)
+        thread.start()
+
+        print("2) Aguardando o retorno do Google no navegador...")
+        _evento.wait(timeout=300)
+        servidor.shutdown()
+
+        if "erro" in _codigo_recebido:
+            print(
+                f"\nAutorização recusada: {_codigo_recebido['erro']}",
+                file=sys.stderr,
+            )
+            return 1
+
+        codigo = _codigo_recebido.get("code")
+
     if not codigo:
         print("\nTempo esgotado aguardando o código de autorização.", file=sys.stderr)
         return 1
@@ -182,6 +243,31 @@ def main() -> int:
         return 1
 
     print("\n✔ Refresh token gerado com sucesso.\n")
+
+    if args.contas_file:
+        caminho_contas = Path(args.contas_file).expanduser()
+        escrever_conta_json(
+            caminho_contas,
+            args.conta,
+            {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "refresh_token": refresh_token,
+                "rotulo": args.rotulo or args.conta,
+            },
+        )
+        print(f"Conta '{args.conta}' gravada em {caminho_contas.resolve()}\n")
+
+        if args.write_env:
+            escrever_env(
+                Path(".env"),
+                "GMAIL_ACCOUNTS_FILE",
+                str(caminho_contas.resolve()),
+            )
+            print("GMAIL_ACCOUNTS_FILE atualizado no .env")
+
+        return 0
+
     print(f"GMAIL_CLIENT_ID={client_id}")
     print(f"GMAIL_CLIENT_SECRET={client_secret}")
     print(f"GMAIL_REFRESH_TOKEN={refresh_token}\n")

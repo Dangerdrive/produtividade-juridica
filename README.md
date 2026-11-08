@@ -1,20 +1,46 @@
-# ⚖️ Produtividade Jurídica — Automação de Prazos
+# ⚖️ Produtividade Jurídica — Plataforma Modular
 
 [![CI](https://github.com/Dangerdrive/produtividade-juridica/actions/workflows/ci.yml/badge.svg)](https://github.com/Dangerdrive/produtividade-juridica/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Lê e-mails de protocolo no Gmail, extrai prazos processuais com **LLM (DeepSeek)** e
-apresenta tudo num dashboard web — **Python + FastAPI, pronto para deploy na Vercel**.
+Plataforma modular de automação jurídica em **Python + FastAPI**, pronta para
+deploy na Vercel. O aplicativo original de prazos virou apenas **um dos módulos**:
 
-> 📘 Planejamento técnico completo (arquitetura, modelo de dados, máquina de estados,
-> limites e roadmap): [`docs/PLANEJAMENTO.md`](docs/PLANEJAMENTO.md)
+| Módulo | Responsabilidade |
+|---|---|
+| `prazos` | Lê e-mails de protocolo no Gmail, extrai prazos com LLM (DeepSeek) e apresenta dashboards. |
+| `google` | Camada única de integração com Gmail, Google Sheets e Google Docs. |
+| `repasses` | Controla repasses numa planilha própria, lista tarefas pendentes e gera links de status por cliente. |
+
+> 📘 Planejamento técnico original: [`docs/PLANEJAMENTO.md`](docs/PLANEJAMENTO.md)
 >
 > 🗄️ O código antigo em Google Apps Script foi arquivado em [`legacy/apps_script/`](legacy/apps_script/)
 > e **não é mais usado**.
 
+```mermaid
+flowchart TB
+    subgraph Plataforma
+        CORE[Núcleo<br/>config · banco · templates · auth]
+        P[prazos]
+        G[google]
+        R[repasses]
+    end
+
+    P --> G
+    R --> G
+    CORE --> P
+    CORE --> R
+
+    G --> GMAIL[Gmail API]
+    G --> SHEETS[Google Sheets]
+    G --> DOCS[Google Docs]
+```
+
 ---
 
-## Como funciona
+## Módulo de prazos — como funciona
+
+O módulo `prazos` mantém o fluxo original:
 
 1. **Ingestão determinística (sem IA)** — busca `in:inbox is:unread`, grava remetente
    (nome/e-mail), assunto, data de recebimento e IDs da mensagem. O **número do processo é
@@ -38,7 +64,7 @@ flowchart LR
     C -->|JSON| D[Normalização<br/>+ validação]
     D -->|prazos| DB
     DB --> E[FastAPI<br/>dashboard + API JSON]
-    F[Vercel Cron] --> G[/api/cron/sync/]
+    F[Vercel Cron] --> G[/api/prazos/cron/sync/]
     G --> A
 ```
 
@@ -48,37 +74,203 @@ flowchart LR
 
 ```
 .
-├── api/index.py              # entrypoint ASGI exigido pela Vercel
+├── api/index.py                  # entrypoint ASGI exigido pela Vercel
 ├── app/
-│   ├── main.py               # FastAPI, middleware, lifespan
-│   ├── config.py             # Settings (pydantic-settings)
-│   ├── db.py                 # engine/sessão + migração leve de colunas
-│   ├── models.py             # Email, Prazo, SyncState
-│   ├── cli.py                # CLI de exploração (python -m app.cli)
-│   ├── deps.py               # token de sincronização
-│   ├── templating.py         # Jinja2 + filtros de data
-│   ├── routers/              # pages, api (JSON), sync (cron/manual/planilha)
-│   ├── services/
-│   │   ├── gmail.py          # REST do Gmail + OAuth2 (httpx)
-│   │   ├── deepseek.py       # cliente do modelo + prompt
-│   │   ├── extracao.py       # regex: nº do processo, datas, tipos de prazo
-│   │   ├── normalizacao.py   # validação de datas/processos
-│   │   ├── ingest.py         # orquestração + idempotência
-│   │   ├── sheets.py         # espelho em Google Sheets (conta de serviço)
-│   │   └── reports.py        # agregações do dashboard
-│   ├── templates/            # dashboard.html, prazos.html
+│   ├── main.py                   # FastAPI: middleware + montagem dos módulos
+│   ├── cli.py                    # CLI (prazos, repasses e links de cliente)
+│   ├── core/                     # infraestrutura compartilhada
+│   │   ├── config.py             # Settings (pydantic-settings)
+│   │   ├── db.py                 # engine/sessão + migração leve
+│   │   ├── deps.py               # tokens de autenticação
+│   │   ├── modulos.py            # registro dos módulos
+│   │   ├── router.py             # página inicial + /health
+│   │   └── templating.py         # Jinja2 multi-módulo + filtros
+│   ├── modules/
+│   │   ├── google/               # integração Google (sem regra de negócio)
+│   │   │   ├── auth.py           # conta de serviço → access token (cache por escopo)
+│   │   │   ├── gmail.py          # OAuth2 + REST do Gmail
+│   │   │   ├── sheets.py         # Sheets API v4 genérica
+│   │   │   ├── docs.py           # Docs API v1 (ler, criar, anexar, substituir)
+│   │   │   ├── router.py         # /google + /api/google/*
+│   │   │   └── templates/status.html
+│   │   ├── prazos/               # o app original, agora isolado
+│   │   │   ├── models.py         # Email, Prazo, SyncState
+│   │   │   ├── services/         # deepseek, extracao, normalizacao,
+│   │   │   │                     # ingest, reports, espelho_sheets
+│   │   │   ├── routers/          # pages, api, sync
+│   │   │   └── templates/        # dashboard.html, prazos.html
+│   │   └── repasses/             # planilha de repasses + status por cliente
+│   │       ├── modelos.py        # Repasse, StatusRepasse, resumos
+│   │       ├── colunas.py        # mapeamento de cabeçalhos (com aliases)
+│   │       ├── tokens.py         # links individuais (HMAC por cliente)
+│   │       ├── deps.py
+│   │       ├── services/         # planilha.py, dominio.py
+│   │       ├── routers/          # api.py, pages.py
+│   │       └── templates/        # painel interno + página do cliente
+│   ├── templates/                # base compartilhada + home
 │   └── static/styles.css
-├── apps_script/              # dashboard (tabela dinâmica) na planilha
-│   ├── Codigo.gs
-│   └── appsscript.json
+├── apps_script/                  # dashboard (tabela dinâmica) na planilha de prazos
 ├── scripts/
-│   ├── authorize_gmail.py    # gera GMAIL_REFRESH_TOKEN
-│   ├── init_db.py            # cria schema (+ --demo)
-│   └── sync_cli.py           # sincronização pelo terminal
-├── tests/                    # 135 testes (pytest)
-├── legacy/apps_script/       # versão antiga (arquivada)
+│   ├── authorize_gmail.py        # gera GMAIL_REFRESH_TOKEN
+│   ├── init_db.py                # cria schema (+ --demo)
+│   ├── sync_cli.py               # sincronização pelo terminal
+│   └── token_repasses.py         # gera links de status por cliente
+├── tests/                        # 173 testes (pytest)
+├── legacy/apps_script/           # versão antiga (arquivada)
 ├── requirements.txt
 └── vercel.json
+```
+
+---
+
+## Módulo `google` — integração única
+
+O módulo `google` concentra todo o acesso ao ecossistema Google. Os demais módulos
+consomem seus clientes; nenhum deles fala diretamente com as APIs do Google.
+
+| Cliente | Autenticação | Operações |
+|---|---|---|
+| `GmailClient` | OAuth2 (refresh token do usuário) | listar, obter, marcar como lida, enviar, parsing MIME/HTML |
+| `SheetsClient` | Conta de serviço | ler, escrever, anexar, limpar, atualizar linhas, cabeçalho, metadados, criar planilha |
+| `DocsClient` | Conta de serviço | ler texto, criar documento, anexar texto, substituir trechos |
+
+A autenticação de conta de serviço (`auth.py`) assina o JWT RS256 uma vez e faz cache
+do access token **por escopo** — Sheets e Docs compartilham a mesma credencial.
+
+### Configuração
+
+```bash
+# Opção 1: conteúdo do JSON (cru ou base64)
+GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account", ... }'
+
+# Opção 2 (mais prática): caminho para o arquivo baixado do Google Cloud
+GOOGLE_SERVICE_ACCOUNT_FILE=/caminho/para/chave.json
+```
+
+Compartilhe cada planilha/documento com o `client_email` da conta de serviço como
+**Editor**. O Gmail continua usando as credenciais OAuth2
+(`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`).
+
+### Endpoints
+
+Todas as rotas de API exigem `Authorization: Bearer $SYNC_TOKEN` (ou `?token=`).
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/google` | Página de status da integração |
+| `GET` | `/api/google/status` | Estado em JSON |
+| `GET` | `/api/google/gmail/mensagens` | Lista mensagens (`q`, `limite`, `pagina_token`, `detalhar`) |
+| `POST` | `/api/google/gmail/mensagens` | Envia uma mensagem (`para`, `assunto`, `corpo`, `cc`, `bcc`, `html`) |
+| `GET` | `/api/google/gmail/mensagens/{id}` | Mensagem completa |
+| `POST` | `/api/google/gmail/mensagens/{id}/lida` | Remove o rótulo `UNREAD` |
+| `GET` | `/api/google/sheets/{sheet_id}/valores` | Lê um intervalo |
+| `PUT` | `/api/google/sheets/{sheet_id}/valores` | Sobrescreve um intervalo |
+| `POST` | `/api/google/sheets/{sheet_id}/append` | Anexa linhas |
+| `GET` | `/api/google/sheets/{sheet_id}/metadados` | Abas e propriedades |
+| `POST` | `/api/google/sheets` | Cria uma planilha |
+| `GET` | `/api/google/docs/{document_id}` | Texto do documento (`completo=true` inclui a estrutura) |
+| `POST` | `/api/google/docs` | Cria um documento |
+| `POST` | `/api/google/docs/{document_id}/texto` | Anexa texto ao final |
+| `POST` | `/api/google/docs/{document_id}/substituir` | Substitui um trecho |
+
+### Teste rápido (Gmail + Sheets)
+
+```bash
+# 1. preencha o .env (GMAIL_* e GOOGLE_SERVICE_ACCOUNT_FILE/JSON)
+# 2. leia um e-mail qualquer
+.venv/bin/python scripts/test_google.py gmail --query "in:anywhere"
+
+# 3. escreva numa planilha existente compartilhada com a conta de serviço
+.venv/bin/python scripts/test_google.py sheets --sheet-id <ID> --aba "Página1"
+
+# 4. ou tente criar uma planilha nova
+.venv/bin/python scripts/test_google.py sheets --criar
+
+# tudo de uma vez
+.venv/bin/python scripts/test_google.py tudo --sheet-id <ID>
+```
+
+> Contas de serviço podem não ter cota no Drive para **criar** arquivos. Se `--criar`
+> falhar, crie a planilha manualmente, compartilhe com o `client_email` da conta de
+> serviço como Editor e use `--sheet-id`.
+
+---
+
+## Módulo `repasses` — planilha, pendências e status do cliente
+
+O módulo fica atrelado a **uma planilha específica** (`REPASSES_SHEET_ID`) e usa a
+conta de serviço do módulo `google`. A planilha é a fonte da verdade.
+
+### Configuração
+
+```bash
+REPASSES_SHEET_ID=1AbC...                 # id da planilha de repasses
+REPASSES_SHEET_TAB=Repasses               # aba
+REPASSES_CLIENTE_TOKEN_SECRET=...         # openssl rand -hex 32
+REPASSES_API_TOKEN=...                    # se vazio, usa SYNC_TOKEN
+# REPASSES_COLUNAS_JSON={"data_prevista": "Vencimento", "responsavel": "Analista"}
+```
+
+### Layout esperado da aba
+
+| A | B | C | D | E | F | G | H | I | J |
+|---|---|---|---|---|---|---|---|---|---|
+| ID | Cliente | Processo | Valor | Data Prevista | Data do Pagamento | Status | Responsável | Observações | Atualizado Em |
+
+- O mapeamento é feito **por nome de cabeçalho**, tolerante a acentos e maiúsculas.
+  Nomes aceitos incluem `Código` para ID, `Sacado` para Cliente, `Vencimento` para
+  Data Prevista e `Situação` para Status.
+- Colunas fora do padrão podem ser mapeadas com `REPASSES_COLUNAS_JSON`.
+- Se a planilha estiver vazia, o cabeçalho padrão é criado automaticamente.
+- A coluna `ID` é obrigatória para atualizações. Se ausente, o módulo informa o erro.
+
+### Status
+
+| Status | Significado | Conta como pendente? |
+|---|---|---|
+| `PENDENTE` | Aguardando pagamento/ação | ✅ |
+| `EM_ANDAMENTO` | Em processamento | ✅ |
+| `CONCLUIDO` | Pago/finalizado | ❌ |
+| `CANCELADO` | Cancelado/estornado | ❌ |
+
+Sinônimos comuns (`pago`, `finalizado`, `em aberto`, `a pagar`, ...) são normalizados.
+
+### Painel interno
+
+- `GET /repasses` — cards de resumo, **tarefas pendentes** ordenadas por vencimento,
+  totais por cliente e tabela completa. Cada pendência tem um formulário para atualizar
+  status/data de pagamento direto na planilha.
+- `GET /repasses/cliente/{cliente}?token=...` — página pública (sem HTTP Basic) com o
+  status daquele cliente. O token é um HMAC-SHA256 do nome normalizado do cliente.
+- `POST /repasses/{id}/status` — atualização via formulário HTML.
+
+### API interna
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/api/repasses` | Lista com filtros `status`, `cliente`, `pendentes`, `q` |
+| `GET` | `/api/repasses/pendentes` | Tarefas pendentes ordenadas por vencimento |
+| `GET` | `/api/repasses/clientes` | Resumo consolidado por cliente |
+| `GET` | `/api/repasses/{id}` | Um repasse |
+| `POST` | `/api/repasses` | Cria um repasse na planilha |
+| `PATCH` | `/api/repasses/{id}` | Atualiza campos (status, valor, datas, responsável, ...) |
+| `GET` | `/api/repasses/cliente/{cliente}?token=...` | Status público do cliente |
+
+As rotas internas exigem `REPASSES_API_TOKEN` (ou `SYNC_TOKEN`). A rota pública de
+cliente exige o token individual e fica liberada do HTTP Basic para que o cliente
+consiga abrir o link.
+
+### Gerar links de cliente
+
+```bash
+# um cliente
+python scripts/token_repasses.py --cliente "Maria Souza" --base https://seu-app.vercel.app
+
+# todos os clientes da planilha
+python scripts/token_repasses.py --todos --base https://seu-app.vercel.app
+
+# equivalente pela CLI
+python -m app.cli repasse-token "Maria Souza" --base https://seu-app.vercel.app
 ```
 
 ---
@@ -132,7 +324,7 @@ python scripts/sync_cli.py --modo historico --limite 100
 Ou via HTTP:
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/sync?modo=historico" \
+curl -X POST "http://127.0.0.1:8000/api/prazos/sync?modo=historico" \
   -H "Authorization: Bearer $SYNC_TOKEN"
 ```
 
@@ -163,14 +355,21 @@ python -m app.cli explorar
 
 # o que já foi processado
 python -m app.cli banco --status REVISAR
+
+# repasses: tarefas pendentes
+python -m app.cli repasses
+
+# link individual de acompanhamento de um cliente
+python -m app.cli repasse-token "Maria Souza" --base https://seu-app.vercel.app
 ```
 
 ---
 
-## Planilha Google Sheets + Dashboard em Apps Script
+## Módulo de prazos — Planilha Google Sheets + Dashboard em Apps Script
 
-O banco Postgres é a **fonte da verdade**; a planilha é uma **projeção** que alimenta o
-dashboard em Apps Script (a tabela dinâmica que você já conhece).
+O banco Postgres é a **fonte da verdade** do módulo de prazos; a planilha é uma
+**projeção** que alimenta o dashboard em Apps Script (a tabela dinâmica que você já
+conhece). É uma planilha **diferente** da usada pelo módulo de repasses.
 
 ```mermaid
 flowchart LR
@@ -180,7 +379,8 @@ flowchart LR
 
 ### 1. Criar a conta de serviço
 
-1. Google Cloud Console → **APIs e serviços → Ativar APIs** → habilite a **Google Sheets API**.
+1. Google Cloud Console → **APIs e serviços → Ativar APIs** → habilite a **Google Sheets API**
+   e a **Google Docs API** (esta última para o módulo `google`).
 2. **Credenciais → Criar credenciais → Conta de serviço**.
 3. Na conta criada: **Chaves → Adicionar chave → JSON**. Guarde o arquivo.
 4. Copie o campo `client_email` (algo como `bot@projeto.iam.gserviceaccount.com`).
@@ -208,7 +408,7 @@ O espelhamento acontece automaticamente ao final de cada sincronização. Para f
 
 ```bash
 python -m app.cli planilha
-curl -X POST "http://localhost:8000/api/sync/sheets" -H "Authorization: Bearer $SYNC_TOKEN"
+curl -X POST "http://localhost:8000/api/prazos/sync/sheets" -H "Authorization: Bearer $SYNC_TOKEN"
 ```
 
 É **idempotente**: a coluna `A` guarda o `ID do Prazo`, então reexecutar não duplica —
@@ -259,8 +459,12 @@ vercel env add GMAIL_CLIENT_ID production
 vercel env add GMAIL_CLIENT_SECRET production
 vercel env add GMAIL_REFRESH_TOKEN production
 vercel env add DEEPSEEK_API_KEY production
-vercel env add SYNC_TOKEN production        # openssl rand -hex 32
-vercel env add APP_PASSWORD production      # protege o dashboard
+vercel env add GOOGLE_SERVICE_ACCOUNT_JSON production
+vercel env add GOOGLE_SHEET_ID production          # módulo de prazos
+vercel env add REPASSES_SHEET_ID production        # módulo de repasses
+vercel env add REPASSES_CLIENTE_TOKEN_SECRET production
+vercel env add SYNC_TOKEN production               # openssl rand -hex 32
+vercel env add APP_PASSWORD production             # protege as páginas internas
 
 vercel --prod
 ```
@@ -269,11 +473,11 @@ As tabelas são criadas automaticamente no primeiro acesso (`lifespan → init_d
 
 ### 3. Agendamento
 
-`vercel.json` já declara um Cron Job diário (`0 11 * * *` → `/api/cron/sync`).
+`vercel.json` já declara um Cron Job diário (`0 11 * * *` → `/api/prazos/cron/sync`).
 
 > ⚠️ No plano **Hobby** a Vercel só permite **1 execução por dia**. Para rodar a cada
 > 15 minutos use um agendador externo (cron-job.org, GitHub Actions) chamando:
-> `https://SEU-APP.vercel.app/api/cron/sync?token=$SYNC_TOKEN`
+> `https://SEU-APP.vercel.app/api/prazos/cron/sync?token=$SYNC_TOKEN`
 > — ou faça upgrade para Pro e ajuste o `schedule`.
 
 A Vercel envia automaticamente `Authorization: Bearer <CRON_SECRET>` quando essa variável
@@ -285,19 +489,25 @@ existe; o endpoint aceita esse cabeçalho, `Bearer $SYNC_TOKEN` ou `?token=`.
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/` | Dashboard (matriz + gráficos) |
-| `GET` | `/prazos` | Listagem com filtros e paginação |
-| `GET` | `/api/stats` | Agregações em JSON |
+| `GET` | `/` | Página inicial com os módulos |
+| `GET` | `/prazos` | Dashboard de prazos (matriz + gráficos) |
+| `GET` | `/prazos/lista` | Listagem com filtros e paginação |
+| `GET` | `/api/prazos/stats` | Agregações em JSON |
 | `GET` | `/api/prazos` | Lista paginada em JSON |
-| `POST` | `/api/sync` | Sincronização manual (requer token) |
-| `GET` | `/api/cron/sync` | Sincronização agendada (requer token) |
-| `POST` | `/api/sync/sheets` | Espelha os prazos na planilha (requer token) |
-| `GET` | `/health` | Saúde + configuração |
+| `POST` | `/api/prazos/sync` | Sincronização manual (requer token) |
+| `GET` | `/api/prazos/cron/sync` | Sincronização agendada (requer token) |
+| `POST` | `/api/prazos/sync/sheets` | Espelha os prazos na planilha (requer token) |
+| `GET` | `/google` | Status da integração Google |
+| `GET` | `/api/google/*` | Gmail, Sheets e Docs (requer token) |
+| `GET` | `/repasses` | Painel interno de repasses |
+| `GET` | `/repasses/cliente/{cliente}` | Status público do cliente (token individual) |
+| `GET/POST/PATCH` | `/api/repasses/*` | API de repasses |
+| `GET` | `/health` | Saúde + configuração de cada módulo |
 | `GET` | `/docs` | OpenAPI/Swagger |
 
 ---
 
-## Modelo de dados
+## Módulo de prazos — modelo de dados
 
 **`emails`** — uma linha por mensagem (ingestão sem IA)
 
@@ -332,21 +542,26 @@ linhas duplicadas como na planilha antiga.
 ## Qualidade
 
 ```bash
-python -m pytest          # 135 testes
+python -m pytest          # 173 testes
 ruff check app tests scripts api
 ```
 
 Cobertura dos testes: regex do número do processo (assunto e corpo), parsing MIME do
 Gmail, retry/backoff do cliente DeepSeek, idempotência e máquina de estados da ingestão,
-espelhamento no Sheets (API mockada) e todas as rotas HTTP.
+espelhamento no Sheets (API mockada), cliente genérico de Sheets, Google Docs (API
+mockada), leitura/escrita da planilha de repasses, regras de pendências/atrasos,
+tokens de cliente e todas as rotas HTTP.
 
 ---
 
 ## Segurança e LGPD
 
 - Nenhuma credencial no código — tudo em variáveis de ambiente.
-- `APP_PASSWORD` habilita HTTP Basic no dashboard (dados jurídicos não ficam públicos).
-- `SYNC_TOKEN` protege os endpoints de sincronização.
+- `APP_PASSWORD` habilita HTTP Basic nas páginas internas (dados jurídicos não ficam públicos).
+- `SYNC_TOKEN` protege os endpoints do módulo de prazos e da integração Google.
+- `REPASSES_API_TOKEN` protege a API interna de repasses (fallback: `SYNC_TOKEN`).
+- Links de cliente usam HMAC-SHA256 com `REPASSES_CLIENTE_TOKEN_SECRET`; as rotas
+  públicas de cliente e os estáticos ficam liberadas do HTTP Basic.
 - O corpo do e-mail é truncado em 12.000 caracteres antes de ir para a API.
 - O conteúdo dos e-mails é enviado a um terceiro (DeepSeek). Avalie o mascaramento de
   dados pessoais antes do uso em produção (Fase 3 do roadmap).

@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import base64
+import json
 from datetime import datetime
 
-from app.services.gmail import (
+import httpx
+
+from app.modules.google.gmail import (
     GmailClient,
     decodificar_header,
+    decodificar_mensagem_raw,
     html_para_texto,
     limpar_texto,
+    montar_mensagem_raw,
     separar_remetente,
 )
+from tests.conftest import settings_teste
 
 
 def _b64(texto: str) -> str:
@@ -139,3 +145,64 @@ class TestConverterMensagem:
         mensagem = GmailClient._converter(bruto)
         assert mensagem.corpo == "corpo curto"
         assert mensagem.assunto == ""
+
+
+class TestEnvio:
+    def test_monta_raw_com_cabecalhos(self):
+        raw = montar_mensagem_raw(
+            para="cliente@exemplo.com",
+            assunto="Atualização do repasse",
+            corpo="Olá!",
+            cc="copia@exemplo.com",
+            bcc="oculto@exemplo.com",
+        )
+        mensagem = decodificar_mensagem_raw(raw)
+
+        assert mensagem["To"] == "cliente@exemplo.com"
+        assert mensagem["Cc"] == "copia@exemplo.com"
+        assert mensagem["Bcc"] == "oculto@exemplo.com"
+        assert mensagem["Subject"] == "Atualização do repasse"
+        assert "Olá!" in mensagem.get_content()
+
+    def test_monta_html_alternativo(self):
+        raw = montar_mensagem_raw(
+            para="cliente@exemplo.com",
+            assunto="Status",
+            corpo="<p>Seu repasse foi pago.</p>",
+            html=True,
+        )
+        mensagem = decodificar_mensagem_raw(raw)
+
+        assert mensagem.is_multipart()
+        assert mensagem.get_body(preferencelist=("html",)).get_content().strip() == (
+            "<p>Seu repasse foi pago.</p>"
+        )
+
+    def test_envia_mensagem(self):
+        capturado: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.host == "oauth2.googleapis.com":
+                return httpx.Response(
+                    200, json={"access_token": "tok", "expires_in": 3600}
+                )
+            capturado.update(json.loads(request.content))
+            return httpx.Response(200, json={"id": "MSG_SENT"})
+
+        settings = settings_teste(
+            gmail_client_id="id",
+            gmail_client_secret="secret",
+            gmail_refresh_token="refresh",
+        )
+        cliente = GmailClient(
+            settings,
+            client=httpx.Client(transport=httpx.MockTransport(handler)),
+            sleep=lambda _s: None,
+        )
+
+        resposta = cliente.enviar_mensagem(
+            para="cliente@exemplo.com", assunto="Oi", corpo="Teste"
+        )
+
+        assert resposta["id"] == "MSG_SENT"
+        assert "raw" in capturado

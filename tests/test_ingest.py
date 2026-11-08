@@ -6,9 +6,9 @@ from datetime import date
 
 from sqlalchemy import func, select
 
-from app.models import Email, Prazo, StatusExtracao
-from app.services.deepseek import DeepSeekError, RespostaInvalida
-from app.services.ingest import sincronizar
+from app.modules.prazos.models import Email, Prazo, StatusExtracao
+from app.modules.prazos.services.deepseek import DeepSeekError, RespostaInvalida
+from app.modules.prazos.services.ingest import sincronizar
 from tests.conftest import FakeDeepSeek, FakeGmail, mensagem, prazo_ok, settings_teste
 
 QUERY = "in:inbox is:unread"
@@ -81,7 +81,7 @@ class TestFluxoBasico:
         assert db.scalars(select(Email)).one().status == StatusExtracao.OK.value
 
     def test_prazo_incompleto_marca_revisar(self, db):
-        from app.services.normalizacao import PrazoExtraido
+        from app.modules.prazos.services.normalizacao import PrazoExtraido
 
         incompleto = PrazoExtraido(
             advogado="Não identificado",
@@ -204,7 +204,7 @@ class TestNumeroProcessoDoAssunto:
         assert deepseek.processos_recebidos == [["0100138-89.2023.5.01.0074"]]
 
     def test_preenche_processo_que_a_ia_nao_encontrou(self, db):
-        from app.services.normalizacao import PrazoExtraido
+        from app.modules.prazos.services.normalizacao import PrazoExtraido
 
         sem_processo = PrazoExtraido(
             advogado="Dra. Maria Souza",
@@ -220,7 +220,7 @@ class TestNumeroProcessoDoAssunto:
         assert prazo.status == StatusExtracao.OK.value
 
     def test_cria_linha_de_rastreamento_sem_prazo(self, db):
-        from app.services.normalizacao import TIPO_NAO_IDENTIFICADO
+        from app.modules.prazos.services.normalizacao import TIPO_NAO_IDENTIFICADO
 
         executar(db, [mensagem(assunto=self.ASSUNTO)], {self.ASSUNTO: []})
 

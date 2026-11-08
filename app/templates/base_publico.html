@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>{% block titulo %}{{ titulo }}{% endblock %} · {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topo topo--publico">
+    <a class="topo__marca" href="#">
+      <span class="topo__icone" aria-hidden="true">💸</span>
+      <span>{{ app_name }}</span>
+    </a>
+    <span class="topo__aviso">Acompanhamento de repasses</span>
+  </header>
+
+  <main class="container">
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <footer class="rodape">
+    <span>Página de acompanhamento — acesso individual por link</span>
+    {% if timezone %}<span class="rodape__fuso">Fuso: {{ timezone }}</span>{% endif %}
+  </footer>
+</body>
+</html>

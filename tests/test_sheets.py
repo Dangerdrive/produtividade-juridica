@@ -11,11 +11,10 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.models import Email, Prazo, StatusExtracao, utcnow
-from app.services.sheets import (
+from app.modules.google.sheets import SheetsClient, SheetsError
+from app.modules.prazos.models import Email, Prazo, StatusExtracao, utcnow
+from app.modules.prazos.services.espelho_sheets import (
     CABECALHOS_PLANILHA,
-    SheetsClient,
-    SheetsError,
     linha_prazo,
     sincronizar_planilha,
 )
@@ -147,14 +146,18 @@ class TestCabecalho:
         fake = FakeSheets()
         _, cliente = montar(chave_privada, fake)
 
-        assert cliente.garantir_cabecalho() is True
+        assert cliente.garantir_cabecalho(
+            CABECALHOS_PLANILHA, ultima_coluna="L"
+        ) is True
         assert fake.cabecalho == list(CABECALHOS_PLANILHA)
 
     def test_nao_reescreve_quando_igual(self, chave_privada):
         fake = FakeSheets(cabecalho=list(CABECALHOS_PLANILHA))
         _, cliente = montar(chave_privada, fake)
 
-        assert cliente.garantir_cabecalho() is False
+        assert cliente.garantir_cabecalho(
+            CABECALHOS_PLANILHA, ultima_coluna="L"
+        ) is False
         assert all(not c.startswith("PUT") for c in fake.chamadas)
 
 

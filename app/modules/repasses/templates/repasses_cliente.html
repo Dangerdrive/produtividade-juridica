@@ -1,0 +1,82 @@
+{% extends "base_publico.html" %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>{{ resumo_cliente.cliente }}</h1>
+    <p class="subtitulo">Acompanhamento dos seus repasses</p>
+  </div>
+</div>
+
+<section class="cards" aria-label="Resumo dos repasses">
+  <article class="card">
+    <span class="card__rotulo">Repasses</span>
+    <strong class="card__valor">{{ resumo_cliente.resumo.total }}</strong>
+  </article>
+  <article class="card {% if resumo_cliente.resumo.pendentes or resumo_cliente.resumo.em_andamento %}card--alerta{% endif %}">
+    <span class="card__rotulo">Em aberto</span>
+    <strong class="card__valor">
+      {{ resumo_cliente.resumo.pendentes + resumo_cliente.resumo.em_andamento }}
+    </strong>
+  </article>
+  <article class="card">
+    <span class="card__rotulo">Concluídos</span>
+    <strong class="card__valor">{{ resumo_cliente.resumo.concluidos }}</strong>
+  </article>
+  <article class="card">
+    <span class="card__rotulo">Valor em aberto</span>
+    <strong class="card__valor card__valor--texto">
+      {{ resumo_cliente.resumo.valor_aberto_formatado }}
+    </strong>
+  </article>
+</section>
+
+{% if resumo_cliente.proxima_data_prevista %}
+  <p class="aviso-prazo">
+    Próximo vencimento previsto: <strong>{{ resumo_cliente.proxima_data_prevista | data }}</strong>
+  </p>
+{% endif %}
+
+<section class="painel painel--sem-padding">
+  <div class="painel__cabecalho painel__cabecalho--interno">
+    <h2>Seus repasses</h2>
+    <span class="painel__meta">{{ resumo_cliente.repasses | length }} registro(s)</span>
+  </div>
+
+  {% if resumo_cliente.repasses %}
+    <div class="tabela-scroll">
+      <table class="tabela tabela--lista">
+        <thead>
+          <tr>
+            <th scope="col">Processo</th>
+            <th scope="col" class="numerico">Valor</th>
+            <th scope="col">Data prevista</th>
+            <th scope="col">Pagamento</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for repasse in resumo_cliente.repasses %}
+            <tr {% if repasse.atrasado() %}class="linha-alerta"{% endif %}>
+              <td class="mono">{{ repasse.processo or "—" }}</td>
+              <td class="numerico">{{ repasse.valor_formatado }}</td>
+              <td class="agora">{{ repasse.data_prevista | data }}</td>
+              <td class="agora">{{ repasse.data_pagamento | data }}</td>
+              <td>
+                <span class="tag tag--{{ repasse.status_css }}">{{ repasse.status.rotulo }}</span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="vazio-simples">Nenhum repasse registrado para este cliente.</p>
+  {% endif %}
+</section>
+
+<p class="nota-rodape">
+  Em caso de divergência, entre em contato com o escritório responsável.
+  Este link é individual e não deve ser compartilhado.
+</p>
+{% endblock %}

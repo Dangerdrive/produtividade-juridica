@@ -6,8 +6,8 @@ from datetime import date
 
 import pytest
 
-from app.services.deepseek import RespostaInvalida, parse_json_tolerante
-from app.services.normalizacao import (
+from app.modules.prazos.services.deepseek import RespostaInvalida, parse_json_tolerante
+from app.modules.prazos.services.normalizacao import (
     normalizar_data,
     normalizar_prazo,
     normalizar_prazos,

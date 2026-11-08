@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from app.models import Email, Prazo, StatusExtracao, utcnow
+from app.modules.prazos.models import Email, Prazo, StatusExtracao, utcnow
 
 
 def semear(db) -> Email:
@@ -44,7 +44,7 @@ class TestHealth:
 
 class TestPaginas:
     def test_dashboard_vazio(self, client):
-        resposta = client.get("/")
+        resposta = client.get("/prazos")
         assert resposta.status_code == 200
         assert "Dashboard" in resposta.text
         assert "Nenhum prazo registrado" in resposta.text
@@ -52,7 +52,7 @@ class TestPaginas:
     def test_dashboard_com_dados(self, client, db):
         semear(db)
 
-        resposta = client.get("/")
+        resposta = client.get("/prazos")
         assert resposta.status_code == 200
         assert "Dra. Maria Souza" in resposta.text
         assert "0001234-56.2024.8.26.0100" in resposta.text
@@ -60,7 +60,7 @@ class TestPaginas:
     def test_listagem_de_prazos(self, client, db):
         semear(db)
 
-        resposta = client.get("/prazos")
+        resposta = client.get("/prazos/lista")
         assert resposta.status_code == 200
         assert "0001234-56.2024.8.26.0100" in resposta.text
         assert "protocolo@tjsp.jus.br" in resposta.text or "Secretaria TJSP" in resposta.text
@@ -68,12 +68,12 @@ class TestPaginas:
     def test_filtro_sem_resultado(self, client, db):
         semear(db)
 
-        resposta = client.get("/prazos", params={"advogado": "Inexistente"})
+        resposta = client.get("/prazos/lista", params={"advogado": "Inexistente"})
         assert resposta.status_code == 200
         assert "Nenhum prazo encontrado" in resposta.text
 
     def test_filtro_por_data_invalida_nao_quebra(self, client):
-        resposta = client.get("/", params={"inicio": "data-invalida"})
+        resposta = client.get("/prazos", params={"inicio": "data-invalida"})
         assert resposta.status_code == 200
 
 
@@ -81,7 +81,7 @@ class TestApiJson:
     def test_stats(self, client, db):
         semear(db)
 
-        resposta = client.get("/api/stats")
+        resposta = client.get("/api/prazos/stats")
         assert resposta.status_code == 200
 
         dados = resposta.json()
@@ -112,20 +112,27 @@ class TestApiJson:
 
 class TestSincronizacao:
     def test_exige_token(self, client):
-        resposta = client.post("/api/sync")
+        resposta = client.post("/api/prazos/sync")
         assert resposta.status_code == 401
 
     def test_token_invalido(self, client):
-        resposta = client.post("/api/sync", headers={"Authorization": "Bearer errado"})
+        resposta = client.post(
+            "/api/prazos/sync", headers={"Authorization": "Bearer errado"}
+        )
         assert resposta.status_code == 401
 
     def test_token_valido_sem_credenciais(self, client):
-        resposta = client.post("/api/sync", headers={"Authorization": "Bearer token-de-teste"})
+        resposta = client.post(
+            "/api/prazos/sync",
+            headers={"Authorization": "Bearer token-de-teste"},
+        )
         assert resposta.status_code == 503
         assert "Gmail" in resposta.json()["detail"]
 
     def test_cron_aceita_token_na_query(self, client):
-        resposta = client.get("/api/cron/sync", params={"token": "token-de-teste"})
+        resposta = client.get(
+            "/api/prazos/cron/sync", params={"token": "token-de-teste"}
+        )
         assert resposta.status_code == 503
 
 

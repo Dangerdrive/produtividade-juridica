@@ -19,15 +19,30 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.config import get_settings
-from app.db import init_db
-from app.routers import api as api_router
-from app.routers import pages as pages_router
-from app.routers import sync as sync_router
-from app.templating import STATIC_DIR
+from app.core.config import get_settings
+from app.core.db import init_db
+from app.core.router import router as core_router
+from app.core.templating import STATIC_DIR
+from app.modules.google.router import router as google_router
+from app.modules.prazos.routers.api import router as prazos_api_router
+from app.modules.prazos.routers.pages import router as prazos_pages_router
+from app.modules.prazos.routers.sync import router as prazos_sync_router
+from app.modules.repasses.routers.api import router as repasses_api_router
+from app.modules.repasses.routers.pages import router as repasses_pages_router
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+#: Rotas que não exigem HTTP Basic: saúde, estáticos e links individuais de
+#: cliente (protegidos por token próprio).
+ROTAS_PUBLICAS = (
+    "/health",
+    "/static",
+    "/static/",
+    "/favicon.ico",
+    "/repasses/cliente/",
+    "/api/repasses/cliente/",
+)
 
 
 @asynccontextmanager
@@ -42,8 +57,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    summary="Automação de prazos processuais a partir de e-mails de protocolo",
-    version="1.0.0",
+    summary="Plataforma modular de automação jurídica",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -53,7 +68,11 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.middleware("http")
 async def protecao_basica(request: Request, call_next):
     """HTTP Basic opcional (``APP_PASSWORD``) para proteger dados jurídicos."""
-    if not settings.app_password or request.url.path in ("/health",):
+    caminho = request.url.path
+    if not settings.app_password or any(
+        caminho == rota or (rota.endswith("/") and caminho.startswith(rota))
+        for rota in ROTAS_PUBLICAS
+    ):
         return await call_next(request)
 
     cabecalho = request.headers.get("authorization", "")
@@ -81,6 +100,10 @@ def _desafio_basico() -> Response:
     )
 
 
-app.include_router(pages_router.router)
-app.include_router(api_router.router)
-app.include_router(sync_router.router)
+app.include_router(core_router)
+app.include_router(prazos_pages_router)
+app.include_router(prazos_api_router)
+app.include_router(prazos_sync_router)
+app.include_router(google_router)
+app.include_router(repasses_pages_router)
+app.include_router(repasses_api_router)

@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Repasses</h1>
+    <p class="subtitulo">
+      Tarefas pendentes e acompanhamento por cliente · planilha vinculada ao módulo
+    </p>
+  </div>
+</div>
+
+{% if erro %}
+  <div class="alerta">
+    <strong>Não foi possível carregar a planilha.</strong>
+    <p>{{ erro }}</p>
+  </div>
+{% endif %}
+
+<section class="cards" aria-label="Indicadores de repasses">
+  <article class="card">
+    <span class="card__rotulo">Repasses</span>
+    <strong class="card__valor">{{ resumo.total }}</strong>
+  </article>
+  <article class="card {% if resumo.pendentes %}card--alerta{% endif %}">
+    <span class="card__rotulo">Pendentes</span>
+    <strong class="card__valor">{{ resumo.pendentes + resumo.em_andamento }}</strong>
+  </article>
+  <article class="card {% if resumo.atrasados %}card--erro{% endif %}">
+    <span class="card__rotulo">Atrasados</span>
+    <strong class="card__valor">{{ resumo.atrasados }}</strong>
+  </article>
+  <article class="card">
+    <span class="card__rotulo">Valor em aberto</span>
+    <strong class="card__valor card__valor--texto">{{ resumo.valor_aberto_formatado }}</strong>
+  </article>
+  <article class="card">
+    <span class="card__rotulo">Valor pago</span>
+    <strong class="card__valor card__valor--texto">{{ resumo.valor_pago_formatado }}</strong>
+  </article>
+</section>
+
+<form class="filtros" method="get" action="/repasses">
+  <label>
+    <span>Status</span>
+    <select name="status">
+      <option value="">Todos</option>
+      {% for opcao in status_opcoes %}
+        <option value="{{ opcao.value }}" {% if opcao.value == filtros.status %}selected{% endif %}>
+          {{ opcao.rotulo }}
+        </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <span>Cliente</span>
+    <input type="search" name="cliente" value="{{ filtros.cliente }}" placeholder="nome do cliente">
+  </label>
+
+  <label>
+    <span>Busca livre</span>
+    <input type="search" name="q" value="{{ filtros.q }}" placeholder="cliente, processo, responsável...">
+  </label>
+
+  <div class="filtros__acoes">
+    <button type="submit">Aplicar</button>
+    <a class="link-limpar" href="/repasses">limpar</a>
+  </div>
+</form>
+
+<section class="painel painel--sem-padding">
+  <div class="painel__cabecalho painel__cabecalho--interno">
+    <h2>Tarefas pendentes</h2>
+    <span class="painel__meta">{{ tarefas | length }} em aberto</span>
+  </div>
+
+  {% if tarefas %}
+    <div class="tabela-scroll">
+      <table class="tabela tabela--lista">
+        <thead>
+          <tr>
+            <th scope="col">Cliente</th>
+            <th scope="col">Processo</th>
+            <th scope="col" class="numerico">Valor</th>
+            <th scope="col">Data prevista</th>
+            <th scope="col">Situação</th>
+            <th scope="col">Responsável</th>
+            <th scope="col">Atualizar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for repasse in tarefas %}
+            <tr {% if repasse.atrasado() %}class="linha-alerta"{% endif %}>
+              <td>{{ repasse.cliente }}</td>
+              <td class="mono">{{ repasse.processo or "—" }}</td>
+              <td class="numerico">{{ repasse.valor_formatado }}</td>
+              <td class="agora">
+                {{ repasse.data_prevista | data }}
+                {% if repasse.atrasado() %}
+                  <span class="tag tag--cancelado">{{ -repasse.dias_restantes() }}d em atraso</span>
+                {% elif repasse.dias_restantes() is not none %}
+                  <span class="tag">{{ repasse.dias_restantes() }}d</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="tag tag--{{ repasse.status_css }}">{{ repasse.status.rotulo }}</span>
+              </td>
+              <td>{{ repasse.responsavel or "—" }}</td>
+              <td>
+                <form class="form-status" method="post" action="/repasses/{{ repasse.id }}/status">
+                  <select name="status" aria-label="Novo status">
+                    {% for opcao in status_opcoes %}
+                      <option value="{{ opcao.value }}" {% if opcao == repasse.status %}selected{% endif %}>
+                        {{ opcao.rotulo }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <input type="date" name="data_pagamento" aria-label="Data do pagamento"
+                         value="{{ repasse.data_pagamento.isoformat() if repasse.data_pagamento else '' }}">
+                  <button type="submit">Salvar</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="vazio-simples">Nenhuma tarefa pendente com os filtros atuais.</p>
+  {% endif %}
+</section>
+
+<section class="painel painel--sem-padding">
+  <div class="painel__cabecalho painel__cabecalho--interno">
+    <h2>Clientes</h2>
+    <span class="painel__meta">{{ clientes_resumo | length }} cliente(s)</span>
+  </div>
+
+  {% if clientes_resumo %}
+    <div class="tabela-scroll">
+      <table class="tabela tabela--lista">
+        <thead>
+          <tr>
+            <th scope="col">Cliente</th>
+            <th scope="col" class="numerico">Repasses</th>
+            <th scope="col" class="numerico">Em aberto</th>
+            <th scope="col" class="numerico">Valor em aberto</th>
+            <th scope="col">Próximo vencimento</th>
+            <th scope="col">Link do cliente</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in clientes_resumo %}
+            <tr>
+              <td>{{ item.cliente }}</td>
+              <td class="numerico">{{ item.resumo.total }}</td>
+              <td class="numerico">{{ item.resumo.pendentes + item.resumo.em_andamento }}</td>
+              <td class="numerico">{{ item.resumo.valor_aberto_formatado }}</td>
+              <td class="agora">{{ item.proxima_data_prevista | data }}</td>
+              <td>
+                {% if links_clientes.get(item.cliente) %}
+                  <a class="link" href="{{ links_clientes[item.cliente] }}" target="_blank" rel="noopener">
+                    abrir link
+                  </a>
+                {% else %}
+                  <span class="texto-fraco">configure o segredo</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="vazio-simples">Nenhum cliente encontrado na planilha.</p>
+  {% endif %}
+</section>
+
+<section class="painel painel--sem-padding">
+  <div class="painel__cabecalho painel__cabecalho--interno">
+    <h2>Todos os repasses</h2>
+    <span class="painel__meta">{{ repasses | length }} linha(s)</span>
+  </div>
+
+  {% if repasses %}
+    <div class="tabela-scroll">
+      <table class="tabela tabela--lista">
+        <thead>
+          <tr>
+            <th scope="col">ID</th>
+            <th scope="col">Cliente</th>
+            <th scope="col">Processo</th>
+            <th scope="col" class="numerico">Valor</th>
+            <th scope="col">Data prevista</th>
+            <th scope="col">Pagamento</th>
+            <th scope="col">Status</th>
+            <th scope="col">Observações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for repasse in repasses %}
+            <tr>
+              <td class="mono">{{ repasse.id }}</td>
+              <td>{{ repasse.cliente }}</td>
+              <td class="mono">{{ repasse.processo or "—" }}</td>
+              <td class="numerico">{{ repasse.valor_formatado }}</td>
+              <td class="agora">{{ repasse.data_prevista | data }}</td>
+              <td class="agora">{{ repasse.data_pagamento | data }}</td>
+              <td><span class="tag tag--{{ repasse.status_css }}">{{ repasse.status.rotulo }}</span></td>
+              <td class="celula-origem">{{ repasse.observacoes or "—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="vazio-simples">Nenhum repasse encontrado.</p>
+  {% endif %}
+</section>
+{% endblock %}

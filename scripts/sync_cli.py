@@ -17,11 +17,11 @@ RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from app.config import get_settings  # noqa: E402
-from app.db import SessionLocal, init_db  # noqa: E402
-from app.services.deepseek import DeepSeekClient  # noqa: E402
-from app.services.gmail import GmailClient  # noqa: E402
-from app.services.ingest import (  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
+from app.core.db import SessionLocal, init_db  # noqa: E402
+from app.modules.google.gmail import GmailClient  # noqa: E402
+from app.modules.prazos.services.deepseek import DeepSeekClient  # noqa: E402
+from app.modules.prazos.services.ingest import (  # noqa: E402
     query_continuo,
     query_historico,
     sincronizar,
@@ -32,6 +32,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Sincroniza e-mails de protocolo")
     parser.add_argument("--modo", choices=["continuo", "historico"], default="continuo")
     parser.add_argument("--limite", type=int, default=None, help="Máximo de mensagens")
+    parser.add_argument("--conta", default=None, help="Nome da conta Gmail")
     parser.add_argument(
         "--segundos", type=float, default=None, help="Orçamento de tempo da execução"
     )
@@ -60,7 +61,7 @@ def main() -> int:
         resultado = sincronizar(
             db,
             settings=settings,
-            gmail=GmailClient(settings),
+            gmail=GmailClient(settings, conta=args.conta),
             deepseek=DeepSeekClient(settings),
             query=query,
             limite=args.limite,

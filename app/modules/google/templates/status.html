@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Integração Google</h1>
+    <p class="subtitulo">
+      Camada compartilhada para Gmail, Google Sheets e Google Docs.
+    </p>
+  </div>
+</div>
+
+<section class="cards" aria-label="Estado da integração">
+  <article class="card {% if google_configurado %}card--ok{% else %}card--alerta{% endif %}">
+    <span class="card__rotulo">Conta de serviço</span>
+    <strong class="card__valor card__valor--texto">
+      {{ "configurada" if google_configurado else "não configurada" }}
+    </strong>
+  </article>
+  <article class="card {% if gmail_configurado %}card--ok{% else %}card--alerta{% endif %}">
+    <span class="card__rotulo">Gmail (OAuth2)</span>
+    <strong class="card__valor card__valor--texto">
+      {{ "configurado" if gmail_configurado else "não configurado" }}
+    </strong>
+  </article>
+  <article class="card {% if sheets_configurado %}card--ok{% else %}card--alerta{% endif %}">
+    <span class="card__rotulo">Sheets de prazos</span>
+    <strong class="card__valor card__valor--texto">
+      {{ "configurado" if sheets_configurado else "não configurado" }}
+    </strong>
+  </article>
+  <article class="card {% if repasses_configurado %}card--ok{% else %}card--alerta{% endif %}">
+    <span class="card__rotulo">Sheets de repasses</span>
+    <strong class="card__valor card__valor--texto">
+      {{ "configurado" if repasses_configurado else "não configurado" }}
+    </strong>
+  </article>
+</section>
+
+<section class="painel">
+  <h2>Endpoints disponíveis</h2>
+  <p class="subtitulo">
+    Todas as rotas de API exigem <code>Authorization: Bearer $SYNC_TOKEN</code>
+    (ou <code>?token=</code>).
+  </p>
+
+  <div class="tabela-scroll">
+    <table class="tabela">
+      <thead>
+        <tr><th>Método</th><th>Rota</th><th>Descrição</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="tag">GET</span></td><td class="mono">/api/google/status</td><td>Estado da integração</td></tr>
+        <tr><td><span class="tag">GET</span></td><td class="mono">/api/google/gmail/mensagens</td><td>Lista mensagens (query, limite, paginação)</td></tr>
+        <tr><td><span class="tag">POST</span></td><td class="mono">/api/google/gmail/mensagens</td><td>Envia uma mensagem</td></tr>
+        <tr><td><span class="tag">GET</span></td><td class="mono">/api/google/gmail/mensagens/{id}</td><td>Conteúdo completo de uma mensagem</td></tr>
+        <tr><td><span class="tag">POST</span></td><td class="mono">/api/google/gmail/mensagens/{id}/lida</td><td>Remove o rótulo UNREAD</td></tr>
+        <tr><td><span class="tag">GET</span></td><td class="mono">/api/google/sheets/{sheet_id}/valores</td><td>Lê um intervalo</td></tr>
+        <tr><td><span class="tag">PUT</span></td><td class="mono">/api/google/sheets/{sheet_id}/valores</td><td>Sobrescreve um intervalo</td></tr>
+        <tr><td><span class="tag">POST</span></td><td class="mono">/api/google/sheets/{sheet_id}/append</td><td>Anexa linhas</td></tr>
+        <tr><td><span class="tag">GET</span></td><td class="mono">/api/google/sheets/{sheet_id}/metadados</td><td>Abas e propriedades</td></tr>
+        <tr><td><span class="tag">POST</span></td><td class="mono">/api/google/sheets</td><td>Cria uma planilha</td></tr>
+        <tr><td><span class="tag">GET</span></td><td class="mono">/api/google/docs/{document_id}</td><td>Lê o texto de um documento</td></tr>
+        <tr><td><span class="tag">POST</span></td><td class="mono">/api/google/docs</td><td>Cria um documento</td></tr>
+        <tr><td><span class="tag">POST</span></td><td class="mono">/api/google/docs/{document_id}/texto</td><td>Anexa texto ao final</td></tr>
+        <tr><td><span class="tag">POST</span></td><td class="mono">/api/google/docs/{document_id}/substituir</td><td>Substitui um trecho</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="painel">
+  <h2>Como habilitar</h2>
+  <ol class="lista-passos">
+    <li>Crie uma conta de serviço no Google Cloud Console e baixe a chave JSON.</li>
+    <li>Ative as APIs <strong>Gmail</strong>, <strong>Google Sheets</strong> e <strong>Google Docs</strong>.</li>
+    <li>
+      Compartilhe cada planilha/documento com o e-mail da conta de serviço
+      (<code>client_email</code>) como <strong>Editor</strong>.
+    </li>
+    <li>
+      Defina <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> com o conteúdo do JSON
+      (cru ou base64).
+    </li>
+  </ol>
+</section>
+{% endblock %}

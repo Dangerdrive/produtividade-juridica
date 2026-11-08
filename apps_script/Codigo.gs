@@ -2,7 +2,8 @@
  * Dashboard da aba DB_Prazos — Google Apps Script
  * =============================================================================
  * Este script NÃO grava dados: a planilha é alimentada pela aplicação Python
- * (app/services/sheets.py). Aqui só existe a camada de apresentação:
+ * (app/modules/prazos/services/espelho_sheets.py). Aqui só existe a camada de
+ * apresentação:
  * a Tabela Dinâmica e os indicadores.
  *
  * Instalação (2 minutos):
@@ -21,7 +22,8 @@ const CONFIG = {
   ABA_DASHBOARD: 'Dashboard',
 
   /**
-   * Cabeçalho esperado (mesma ordem de app/services/sheets.py).
+   * Cabeçalho esperado (mesma ordem de
+   * app/modules/prazos/services/espelho_sheets.py).
    * O script localiza as colunas POR NOME, então reordenar não quebra nada.
    */
   COLUNAS: {

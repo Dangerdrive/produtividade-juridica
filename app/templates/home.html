@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Módulos</h1>
+    <p class="subtitulo">Escolha o módulo que deseja utilizar.</p>
+  </div>
+</div>
+
+<section class="grade-modulos" aria-label="Módulos da plataforma">
+  {% for modulo in modulos %}
+    <a class="card card--modulo" href="{{ modulo.rota }}">
+      <span class="card__icone" aria-hidden="true">{{ modulo.icone }}</span>
+      <span class="card__rotulo">{{ modulo.nome }}</span>
+      <p class="card__descricao">{{ modulo.descricao }}</p>
+      <span class="tag {{ 'tag--concluido' if modulo.configurado else 'tag--pendente' }}">
+        {{ "configurado" if modulo.configurado else "configuração pendente" }}
+      </span>
+    </a>
+  {% endfor %}
+</section>
+{% endblock %}

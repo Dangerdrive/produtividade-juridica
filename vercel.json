@@ -2,7 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/index.py": {
-      "includeFiles": ["app/templates/**", "app/static/**"],
+      "includeFiles": [
+        "app/templates/**",
+        "app/modules/**/templates/**",
+        "app/static/**"
+      ],
       "maxDuration": 60,
       "memory": 1024
     }
@@ -11,6 +15,6 @@
     { "source": "/(.*)", "destination": "/api/index" }
   ],
   "crons": [
-    { "path": "/api/cron/sync", "schedule": "0 11 * * *" }
+    { "path": "/api/prazos/cron/sync", "schedule": "0 11 * * *" }
   ]
 }

@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from app.services.extracao import (
+from app.modules.prazos.services.extracao import (
     analisar,
     analisar_email,
     extrair_datas,
